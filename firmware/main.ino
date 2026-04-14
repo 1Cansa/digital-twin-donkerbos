@@ -108,6 +108,7 @@ void setup() {
   Serial.println("[ESP] Ready");
 }
 
+#define TIME_SLEEPING 1800000
 void loop() {
   uint32_t timestamp = getTimestamp();
 
@@ -127,7 +128,7 @@ void loop() {
   sendToAPI(json);
 
   Serial.println("[ESP] Sleep 60s...\n");
-  delay(60000);
+  delay(TIME_SLEEPING);
 }
 
 void readBME() {
