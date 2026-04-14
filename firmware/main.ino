@@ -14,13 +14,13 @@
 #define WIFI_PASS "WIFIPASSWORD"
 
 // API
-#define API_URL "put API URL"
+#define API_URL "https://digital-twin-donkerbos.onrender.com/api/sensor"
 #define API_KEY "put your API KEY"
 
 // Timing
 #define SEND_AT_HOUR       11
 #define SEND_EVERYTIME     false
-#define SLEEP_DURATION     10 * 60 * 1000000
+#define SLEEP_DURATION     5 * 60 * 1000000
 #define CONNECTION_TIMEOUT 10 * 1000
 
 
