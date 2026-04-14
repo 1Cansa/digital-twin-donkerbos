@@ -18,10 +18,18 @@
 #define API_KEY "put your API KEY"
 
 // Timing
-#define SEND_AT_HOUR       11
-#define SEND_EVERYTIME     false
-#define SLEEP_DURATION     5 * 60 * 1000000
+#define SEND_AT_HOUR 11
+#define SEND_EVERYTIME false
+#define SLEEP_DURATION 5 * 60 * 1000000
 #define CONNECTION_TIMEOUT 10000
+
+// Multiplexer
+#define PCA_ADDR 0x70
+
+// Channels
+#define CH_PMSA 3
+#define CH_AS7341 6
+#define CH_BME 7
 
 // Microphones
 #define MIC_LOUD_DIGITAL 32
@@ -31,8 +39,6 @@
 
 // Sensors
 Adafruit_BME680 bme;
-#define SEALEVELPRESSURE_HPA (1013.25)
-
 Adafruit_PM25AQI aqi;
 PM25_AQI_Data pmsaData;
 
@@ -48,9 +54,17 @@ int micLoudAnalog  = 0;
 int micLowDigital  = 0;
 int micLowAnalog   = 0;
 
-// RTC persistence
 RTC_DATA_ATTR bool sentToday = false;
 RTC_DATA_ATTR uint32_t lastSentDay = 0;
+
+#define SEALEVELPRESSURE_HPA (1013.25)
+
+void selectChannel(uint8_t channel) {
+  Wire.beginTransmission(PCA_ADDR);
+  Wire.write(1 << channel);
+  Wire.endTransmission();
+  delay(5);
+}
 
 void setup() {
   Serial.begin(115200);
@@ -62,19 +76,37 @@ void setup() {
   Wire.begin();
   Wire.setTimeout(2000);
 
-  if (!bme.begin(0x77)) Serial.println("[ERROR] BME680 init failed");
-  if (!as7341.begin()) Serial.println("[ERROR] AS7341 init failed");
+  // BME680
+  selectChannel(CH_BME);
+  if (!bme.begin(0x77)) {
+    Serial.println("[ERROR] BME680 init failed");
+  } else {
+    Serial.println("[OK] BME680 ready");
+  }
 
+  // AS7341
+  selectChannel(CH_AS7341);
+  if (!as7341.begin()) {
+    Serial.println("[ERROR] AS7341 init failed");
+  } else {
+    Serial.println("[OK] AS7341 ready");
+  }
+
+  // PMSA
+  selectChannel(CH_PMSA);
   Serial.println("[ESP] Warming up PMSA...");
   if (!aqi.begin_I2C()) {
     Serial.println("[ERROR] PMSA init failed");
   }
   delay(30000);
-  Serial.println("[ESP] Warmup done");
+  Serial.println("[OK] PMSA ready");
 
-  if (!rtc.begin()) Serial.println("[ERROR] RTC not found!");
+  // RTC
+  if (!rtc.begin()) {
+    Serial.println("[ERROR] RTC not found");
+  }
 
-  // Sensor configs
+  // Config sensors
   as7341.setATIME(100);
   as7341.setASTEP(999);
   as7341.setGain(AS7341_GAIN_256X);
@@ -116,15 +148,35 @@ void loop() {
   goToSleep();
 }
 
-uint32_t getTimestampSafe() {
-  if (rtc.lostPower()) {
-    Serial.println("[WARN] RTC lost power, syncing NTP...");
-    if (!syncRTC()) {
-      Serial.println("[ERROR] RTC sync failed");
-      return 0;
-    }
-  }
-  return rtc.now().unixtime();
+bool readPMSA() {
+  selectChannel(CH_PMSA);
+  return aqi.read(&pmsaData);
+}
+
+bool readBME() {
+  selectChannel(CH_BME);
+  return bme.performReading();
+}
+
+bool readAS() {
+  selectChannel(CH_AS7341);
+
+  if (!as7341.readAllChannels()) return false;
+
+  flicker = as7341.detectFlickerHz();
+
+  asCounts[0] = as7341.getChannel(AS7341_CHANNEL_415nm_F1);
+  asCounts[1] = as7341.getChannel(AS7341_CHANNEL_445nm_F2);
+  asCounts[2] = as7341.getChannel(AS7341_CHANNEL_480nm_F3);
+  asCounts[3] = as7341.getChannel(AS7341_CHANNEL_515nm_F4);
+  asCounts[4] = as7341.getChannel(AS7341_CHANNEL_555nm_F5);
+  asCounts[5] = as7341.getChannel(AS7341_CHANNEL_590nm_F6);
+  asCounts[6] = as7341.getChannel(AS7341_CHANNEL_630nm_F7);
+  asCounts[7] = as7341.getChannel(AS7341_CHANNEL_680nm_F8);
+  asCounts[8] = as7341.getChannel(AS7341_CHANNEL_CLEAR);
+  asCounts[9] = as7341.getChannel(AS7341_CHANNEL_NIR);
+
+  return true;
 }
 
 void readMicrophones() {
@@ -132,10 +184,38 @@ void readMicrophones() {
   micLoudAnalog  = analogRead(MIC_LOUD_ANALOG);
   micLowDigital  = digitalRead(MIC_LOW_DIGITAL);
   micLowAnalog   = analogRead(MIC_LOW_ANALOG);
-
-  Serial.printf("[MIC] Loud D:%d A:%d | Low D:%d A:%d\n",
-    micLoudDigital, micLoudAnalog, micLowDigital, micLowAnalog);
 }
+
+uint32_t getTimestampSafe() {
+  if (rtc.lostPower()) {
+    Serial.println("[WARN] RTC lost power, syncing...");
+    if (!syncRTC()) return 0;
+  }
+  return rtc.now().unixtime();
+}
+
+bool syncRTC() {
+  if (!connectWiFi()) return false;
+
+  configTime(0, 0, "pool.ntp.org", "time.nist.gov");
+
+  struct tm timeinfo;
+  while (!getLocalTime(&timeinfo)) delay(500);
+
+  rtc.adjust(DateTime(
+    timeinfo.tm_year + 1900,
+    timeinfo.tm_mon + 1,
+    timeinfo.tm_mday,
+    timeinfo.tm_hour,
+    timeinfo.tm_min,
+    timeinfo.tm_sec
+  ));
+
+  WiFi.disconnect(true);
+  esp_wifi_stop();
+  return true;
+}
+
 
 bool sendToAPI(const char* json) {
   if (!connectWiFi()) return false;
@@ -155,9 +235,24 @@ bool sendToAPI(const char* json) {
   WiFi.disconnect(true);
   esp_wifi_stop();
 
-  if (code == 200) return true;
+  return code == 200;
+}
 
-  Serial.println("[ERROR] HTTP POST failed");
+bool connectWiFi() {
+  WiFi.begin(WIFI_SSID, WIFI_PASS);
+
+  long start = millis();
+  while (WiFi.status() != WL_CONNECTED && millis() - start < CONNECTION_TIMEOUT) {
+    delay(500);
+    Serial.print(".");
+  }
+
+  if (WiFi.status() == WL_CONNECTED) {
+    Serial.println("\n[WiFi] Connected");
+    return true;
+  }
+
+  Serial.println("\n[ERROR] WiFi failed");
   return false;
 }
 
@@ -165,58 +260,6 @@ void goToSleep() {
   Serial.println("[ESP] Deep sleep...");
   esp_sleep_enable_timer_wakeup(SLEEP_DURATION);
   esp_deep_sleep_start();
-}
-
-// RTC / NTP
-bool syncRTC() {
-  if (!connectWiFi()) return false;
-
-  configTime(0, 0, "pool.ntp.org", "time.nist.gov");
-
-  struct tm timeinfo;
-  while (!getLocalTime(&timeinfo)) {
-    delay(500);
-  }
-
-  rtc.adjust(DateTime(
-    timeinfo.tm_year + 1900,
-    timeinfo.tm_mon + 1,
-    timeinfo.tm_mday,
-    timeinfo.tm_hour,
-    timeinfo.tm_min,
-    timeinfo.tm_sec
-  ));
-
-  WiFi.disconnect(true);
-  esp_wifi_stop();
-  return true;
-}
-
-bool readPMSA() {
-  return aqi.read(&pmsaData);
-}
-
-bool readBME() {
-  return bme.performReading();
-}
-
-bool readAS() {
-  if (!as7341.readAllChannels()) return false;
-
-  flicker = as7341.detectFlickerHz();
-
-  asCounts[0] = as7341.getChannel(AS7341_CHANNEL_415nm_F1);
-  asCounts[1] = as7341.getChannel(AS7341_CHANNEL_445nm_F2);
-  asCounts[2] = as7341.getChannel(AS7341_CHANNEL_480nm_F3);
-  asCounts[3] = as7341.getChannel(AS7341_CHANNEL_515nm_F4);
-  asCounts[4] = as7341.getChannel(AS7341_CHANNEL_555nm_F5);
-  asCounts[5] = as7341.getChannel(AS7341_CHANNEL_590nm_F6);
-  asCounts[6] = as7341.getChannel(AS7341_CHANNEL_630nm_F7);
-  asCounts[7] = as7341.getChannel(AS7341_CHANNEL_680nm_F8);
-  asCounts[8] = as7341.getChannel(AS7341_CHANNEL_CLEAR);
-  asCounts[9] = as7341.getChannel(AS7341_CHANNEL_NIR);
-
-  return true;
 }
 
 void buildJSON(char* buf, size_t bufSize, uint32_t timestamp) {
@@ -264,21 +307,4 @@ void buildJSON(char* buf, size_t bufSize, uint32_t timestamp) {
     asCounts[8], asCounts[9], flicker,
     micLoudDigital, micLoudAnalog,
     micLowDigital, micLowAnalog);
-}
-
-  bool connectWiFi() {
-  WiFi.begin(WIFI_SSID, WIFI_PASS);
-
-  long start = millis();
-  while (WiFi.status() != WL_CONNECTED && millis() - start < CONNECTION_TIMEOUT) {
-    delay(500);
-    Serial.print(".");
-  }
-  if (WiFi.status() == WL_CONNECTED) {
-    Serial.println("\n[WiFi] Connected");
-    return true;
-  }
-
-  Serial.println("\n[ERROR] WiFi connection failed");
-  return false;
 }
