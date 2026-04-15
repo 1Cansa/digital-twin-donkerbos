@@ -237,8 +237,8 @@ void buildJSON(char* buf, size_t size, uint32_t ts) {
     "\"mic_loud_digital\":%u,"
     "\"mic_loud_analog\":%u,"
     "\"mic_low_digital\":%u,"
-    "\"mic_low_analog\":%u",
-    "\"device_id\":\"%s\"
+    "\"mic_low_analog\":%u,"
+    "\"device_id\":\"%s\""
     "}",
     ts,
     temperature, pressure, humidity, gas, altitude,
@@ -249,7 +249,8 @@ void buildJSON(char* buf, size_t size, uint32_t ts) {
     asCounts[4], asCounts[5], asCounts[6], asCounts[7],
     asCounts[8], asCounts[9], flicker,
     mic_loud_digital, mic_loud_analog,
-    mic_low_digital,  mic_low_analog, DEVICE_ID
+    mic_low_digital,  mic_low_analog,
+    DEVICE_ID
   );
 }
 
