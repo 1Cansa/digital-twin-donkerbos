@@ -36,7 +36,7 @@ app.post("/api/sensor", requireApiKey, async (req, res) => {
         f5_555nm, f6_590nm, f7_630nm, f8_680nm,
         clear, nir, flicker_hz,
         mic_loud_digital, mic_loud_analog,
-        mic_low_digital, mic_low_analog
+        mic_low_digital, mic_low_analog, device_id
       ) VALUES (
         $1,$2,$3,$4,$5,$6,
         $7,$8,$9,
@@ -45,7 +45,7 @@ app.post("/api/sensor", requireApiKey, async (req, res) => {
         $16,$17,$18,$19,
         $20,$21,$22,$23,
         $24,$25,$26,
-        $27,$28,$29,$30
+        $27,$28,$29,$30, $31
       )`,
       [
         d.timestamp, d.temperature_c, d.pressure_hpa, d.humidity_pct, d.gas_kohms, d.altitude_m,
@@ -56,7 +56,7 @@ app.post("/api/sensor", requireApiKey, async (req, res) => {
         d.f5_555nm, d.f6_590nm, d.f7_630nm, d.f8_680nm,
         d.clear, d.nir, d.flicker_hz,
         d.mic_loud_digital, d.mic_loud_analog,
-        d.mic_low_digital, d.mic_low_analog
+        d.mic_low_digital, d.mic_low_analog, d.device_id
       ]
     );
 

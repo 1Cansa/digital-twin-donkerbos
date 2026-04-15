@@ -16,6 +16,7 @@
 // API
 #define API_URL "https://digital-twin-donkerbos.onrender.com/api/sensor"
 #define API_KEY "API_KEY"
+#define DEVICE_ID "YOUR_DEVICE_ID"
 
 // PCA9548A
 #define PCA_ADDR  0x70
@@ -127,7 +128,7 @@ void loop() {
 
   sendToAPI(json);
 
-  Serial.println("[ESP] Sleep 60s...\n");
+  Serial.println("[ESP] Sleep 30 minutes...\n");
   delay(TIME_SLEEPING);
 }
 
@@ -236,7 +237,8 @@ void buildJSON(char* buf, size_t size, uint32_t ts) {
     "\"mic_loud_digital\":%u,"
     "\"mic_loud_analog\":%u,"
     "\"mic_low_digital\":%u,"
-    "\"mic_low_analog\":%u"
+    "\"mic_low_analog\":%u",
+    "\"device_id\":\"%s\"
     "}",
     ts,
     temperature, pressure, humidity, gas, altitude,
@@ -247,7 +249,7 @@ void buildJSON(char* buf, size_t size, uint32_t ts) {
     asCounts[4], asCounts[5], asCounts[6], asCounts[7],
     asCounts[8], asCounts[9], flicker,
     mic_loud_digital, mic_loud_analog,
-    mic_low_digital,  mic_low_analog
+    mic_low_digital,  mic_low_analog, DEVICE_ID
   );
 }
 
