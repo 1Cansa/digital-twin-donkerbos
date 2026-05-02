@@ -28,9 +28,9 @@ CREATE TABLE IF NOT EXISTS sensor_readings (
   nir             FLOAT,
   flicker_hz      INTEGER,
 
-  -- Microphones
   mic_loud_digital  INTEGER,
   mic_loud_analog   INTEGER,
   mic_low_digital   INTEGER,
-  mic_low_analog    INTEGER
+  mic_low_analog    INTEGER,
+  device_id         TEXT 
 );
